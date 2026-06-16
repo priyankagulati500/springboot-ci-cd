@@ -1,12 +1,13 @@
-name: Spring Boot Gradle CI/CD
+name: Spring Boot Gradle CI
 
 on:
   push:
     branches:
       - main
+  pull_request:
 
 jobs:
-  build-and-deploy:
+  build:
     runs-on: ubuntu-latest
 
     steps:
@@ -30,25 +31,3 @@ jobs:
 
       - name: Verify Generated JAR
         run: ls -la build/libs/
-
-      - name: Copy JAR to Server
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.HOST }}
-          username: ${{ secrets.USERNAME }}
-          key: ${{ secrets.SSH_KEY }}
-          source: "build/libs/*.jar"
-          target: "/opt/springboot"
-
-      - name: Restart Spring Boot Application
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.HOST }}
-          username: ${{ secrets.USERNAME }}
-          key: ${{ secrets.SSH_KEY }}
-          script: |
-            pkill -f '.jar' || true
-
-            JAR_FILE=$(ls /opt/springboot/build/libs/*.jar | head -n 1)
-
-            nohup java -jar $JAR_FILE > /opt/springboot/app.log 2>&1 &
