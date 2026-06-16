@@ -1,39 +1,54 @@
-name: Java CI with Gradle
+name: Spring Boot Gradle CI/CD
 
 on:
   push:
-    branches: [ "master" ]
-  pull_request:
-    branches: [ "master" ]
+    branches:
+      - main
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
 
     steps:
-      - uses: actions/checkout@v4
-      - name: Set up JDK 21
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Set Up JDK 17
         uses: actions/setup-java@v4
         with:
-          java-version: '21'
-          distribution: 'temurin'
+          distribution: temurin
+          java-version: '17'
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@af1da67850ed9a4cedd57bfd976089dd991e2582 # v4.0.0
-
-      - name: Allow gradlew execute
+      - name: Grant Execute Permission to Gradle Wrapper
         run: chmod +x gradlew
 
-      - name: Build with Gradle Wrapper
-        run: ./gradlew build
+      - name: Run Unit Tests
+        run: ./gradlew test
 
-      - name: Publish to Registry
-        uses: elgohr/Publish-Docker-Github-Action@v5
+      - name: Build Spring Boot JAR
+        run: ./gradlew clean bootJar
+
+      - name: Verify Generated JAR
+        run: ls -la build/libs/
+
+      - name: Copy JAR to Server
+        uses: appleboy/scp-action@v0.1.7
         with:
-          name: euznsazzad/spring-boot-ci-cd
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-      - name: Deploy to render
-        run: curl ${{ secrets.RENDER_HOOK }}
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          source: "build/libs/*.jar"
+          target: "/opt/springboot"
+
+      - name: Restart Spring Boot Application
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            pkill -f '.jar' || true
+
+            JAR_FILE=$(ls /opt/springboot/build/libs/*.jar | head -n 1)
+
+            nohup java -jar $JAR_FILE > /opt/springboot/app.log 2>&1 &
